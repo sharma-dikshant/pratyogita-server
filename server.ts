@@ -1,13 +1,15 @@
 import express from "express";
 import mysql from "mysql2/promise";
 
+import dotenv from "dotenv";
+dotenv.config({path : "./config.env"});
 const app = express();
 
 const access = {
-  host: "host",
-  user: "mock_user",
-  password: "mock_password",
-  database: "pratyogita",
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
 };
 
 async function main() {
