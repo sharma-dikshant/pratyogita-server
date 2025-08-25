@@ -1,9 +1,8 @@
-import express from "express";
 import mysql from "mysql2/promise";
-
+import app from "./app";
 import dotenv from "dotenv";
 dotenv.config({path : "./config.env"});
-const app = express();
+
 
 const access = {
   host: process.env.DB_HOST,
