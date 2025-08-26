@@ -1,8 +1,14 @@
 import express from "express";
-import userRouter from "./src/routes/user.router";
+import userRouter from "./src/routes/users.router";
+import morgan from "morgan";
 
 const app = express();
 
-app.get("/api/users", userRouter);
+/* GLOBAL MIDDLEWARES */
+app.use(morgan("dev"));
+
+
+/* ROUTE MIDDLEWARES */
+app.use("/api/users", userRouter);
 
 export default app;
