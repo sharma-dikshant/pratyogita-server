@@ -9,7 +9,8 @@ insert into roles (role_name) values
 
 -- Users 
 INSERT INTO users (name, role_id, email, password) VALUES
-('Alice Johnson', 1, 'alice@admin.com', 'test1234'),
+('test admin', 1, 'test@admin.com', 'test1234'),
+('test user', 1, 'test@user.com', 'test1234'),
 ('Bob Smith', 2, 'bob@creator.com', 'test1234'),
 ('Charlie Brown', 3, 'charlie@user.com', 'test1234'),
 ('Daisy Ridley', 3, 'daisy@user.com', 'test1234'),
