@@ -1,8 +1,17 @@
 import fs from "fs";
 import csv from "csv-parser";
-import { getPool } from "../../db/config";
 
-export const createContest = async (req, res) => {
+import { Response, Request, NextFunction } from "express";
+
+import { getPool } from "../../db/config";
+import ApiResponse from "../utils/ApiResponse";
+
+/* CREATE CONTEST */
+export const createContest = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
   const Pool = getPool();
   const connection = await Pool.getConnection(); // get dedicated connection
 
@@ -15,6 +24,7 @@ export const createContest = async (req, res) => {
       [
         req.body.title,
         req.body.description,
+        //@ts-ignore //TODO
         req.user.id,
         req.body.visibility || "private",
       ]
@@ -68,7 +78,9 @@ export const createContest = async (req, res) => {
 
           // All inserts succeeded
           await connection.commit();
-          res.status(200).json({ message: "Contest created successfully" });
+          return new ApiResponse(200, "contest created successfully", {
+            contest_id: contest_id,
+          }).send(res);
         } catch (err) {
           // Something failed → rollback
           await connection.rollback();
@@ -82,5 +94,98 @@ export const createContest = async (req, res) => {
     await connection.rollback();
     connection.release();
     res.status(500).json({ error: "Unexpected server error" });
+  }
+};
+
+/* GET CONTEST */
+/**
+    {
+      contest_id: 1,
+      title: test contest,
+      description: this is test assessment,
+      questions: [
+        {
+          question_id: 1,
+          type: mcqs,
+          description: what is type declaration,
+          marks: 2,
+          options: [
+            {
+              mcq_id: 1,
+              option_text: type checking
+            },
+          ]
+        },
+      ]
+    } 
+
+   */
+
+export const getContest = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const Pool = getPool();
+  const connection = await Pool.getConnection();
+
+  try {
+    const [contestRows] = await connection.query(
+      "SELECT contest_id, title, description FROM CONTESTS WHERE contest_id = ?",
+      [req.params.contestId]
+    );
+
+    if (contestRows.length === 0) {
+      return res.status(404).json({ message: "Contest not found" });
+    }
+
+    const contest = contestRows[0];
+
+    const [questions] = await connection.query(
+      "SELECT question_id, type, description, marks FROM QUESTIONS WHERE contest_id = ?",
+      [req.params.contestId]
+    );
+
+    // fetch options for each question
+    for (const q of questions) {
+      const [options] = await connection.query(
+        "SELECT mcq_id, option_text FROM MCQS WHERE question_id = ?",
+        [q.question_id]
+      );
+      q.options = options;
+    }
+
+    const result = {
+      ...contest,
+      questions,
+    };
+
+    return new ApiResponse(200, "Successfully fetched contest", result).send(
+      res
+    );
+  } catch (error) {
+    next(error);
+  } finally {
+    connection.release();
+  }
+};
+
+export const getAllContest = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const Pool = getPool();
+    const [contests] = await Pool.query(
+      "SELECT contest_id, title, description, visibility FROM CONTESTS"
+    );
+
+    return new ApiResponse(200, "sucess", contests).send(res);
+  } catch (error) {
+    res.status(500).json({
+      message: "failed",
+      error: `INTERNAL SERVER ERROR: ${error.message}`,
+    });
   }
 };
