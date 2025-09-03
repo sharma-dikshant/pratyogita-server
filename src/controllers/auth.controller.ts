@@ -29,39 +29,6 @@ const verifyAccessToken = (token: string) => {
   }
 };
 
-export const protect = (req: Request, res: Response, next: NextFunction) => {
-  // get token
-  let token: string | null;
-  if (
-    req.headers.authorization &&
-    req.headers.authorization.startsWith("Bearer")
-  ) {
-    token = req.headers.authorization.split(" ")[1];
-  } else if (req.cookies.auth) {
-    token = req.cookies.auth;
-  }
-
-  if (!token) {
-    return res.status(403).json({
-      message: "you're not logged in!",
-    });
-  }
-
-  // verify token
-  if (!verifyAccessToken(token)) {
-    return res.status(403).json({
-      message: "invalid access token!",
-    });
-  }
-
-  const loggedInUser = jwt.decode(token);
-  console.log(loggedInUser);
-  // append user
-  //@ts-ignore
-  req.user = { id: 1, role: "admin" };
-  next();
-};
-
 export const signup = async (
   req: Request,
   res: Response,
@@ -83,8 +50,11 @@ export const signup = async (
       "INSERT INTO USERS (NAME, EMAIL, PASSWORD) VALUES (?, ?, ?)",
       [name, email, hashedPassword]
     );
-    //TODO add role id
-    const token = createAccessToken({ id: qUser.insertId, name, email });
+    const token = createAccessToken({
+      id: qUser.insertId,
+      role_id: 3, // register only participants
+      email,
+    });
 
     return new ApiResponse(200, "success", {
       id: qUser.insertId,
@@ -112,7 +82,7 @@ export const login = async (
     const connection = await Pool.getConnection();
 
     const [qUser] = await connection.query(
-      "SELECT USER_ID, PASSWORD FROM USERS WHERE EMAIL = ?",
+      "SELECT USER_ID, PASSWORD, ROLE_ID FROM USERS WHERE EMAIL = ?",
       [email]
     );
     if (!qUser[0])
@@ -121,8 +91,11 @@ export const login = async (
     if (!(await bcrypt.compare(password, qUser[0].PASSWORD)))
       return res.status(400).json({ message: "invalid password" });
 
-    //TODO add role id
-    const token = createAccessToken({ id: qUser[0].USER_ID, email });
+    const token = createAccessToken({
+      id: qUser[0].USER_ID,
+      role_id: qUser[0].ROLE_ID,
+      email,
+    });
 
     return new ApiResponse(200, "success", { token }).send(res);
   } catch (error) {
@@ -134,3 +107,63 @@ export const login = async (
 };
 
 export const logout = (req: Request, res: Response, next: NextFunction) => {};
+
+export const protect = (req: Request, res: Response, next: NextFunction) => {
+  // get token
+  let token: string | null;
+  if (
+    req.headers.authorization &&
+    req.headers.authorization.startsWith("Bearer")
+  ) {
+    token = req.headers.authorization.split(" ")[1];
+  } else if (req.cookies.auth) {
+    token = req.cookies.auth;
+  }
+
+  if (!token) {
+    return res.status(403).json({
+      message: "you're not logged in!",
+    });
+  }
+
+  // verify token
+  if (!verifyAccessToken(token)) {
+    return res.status(403).json({
+      message: "invalid access token!",
+    });
+  }
+
+  const loggedInUser = jwt.decode(token);
+  // append user
+  //@ts-ignore
+  req.user = loggedInUser;
+  next();
+};
+
+export const restricted = (...roles: string[]) => {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const Pool = getPool();
+      const connection = await Pool.getConnection();
+
+      const [q] = await connection.query(
+        "SELECT ROLE_NAME FROM ROLES WHERE ROLE_ID = ?",
+        //@ts-ignore
+        [req.user.role_id]
+      );
+      const userRole = q[0].ROLE_NAME || null;
+      if (!roles.includes(userRole)) {
+        return res.status(403).json({
+          message: "you're not allowed to access this service",
+        });
+      }
+      // go forward
+      next();
+    } catch (error) {
+      return res.status(500).json({
+        message: "internal server error",
+        error: error.message,
+      });
+    }
+  };
+};
