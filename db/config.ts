@@ -1,5 +1,5 @@
 import mysql from "mysql2/promise";
-let pool;
+let pool: mysql.Pool;
 
 export async function initDB() {
   try {
@@ -18,7 +18,7 @@ export async function initDB() {
     console.log("✅ DB Connected!");
     connection.release(); // release back to pool
     return pool;
-  } catch (err) {
+  } catch (err: any) {
     console.error("❌ DB Connection failed:", err.message);
     process.exit(1); // stop the server if DB not connected
   }

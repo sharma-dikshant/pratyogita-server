@@ -2,13 +2,29 @@ import fs from "fs";
 import csv from "csv-parser";
 
 import { Response, Request, NextFunction } from "express";
+import { AuthenticatedRequest } from "../types";
 
 import { getPool } from "../../db/config";
 import ApiResponse from "../utils/ApiResponse";
+import { ResultSetHeader, RowDataPacket } from "mysql2";
+import { Multer } from "multer";
 
 /* CREATE CONTEST */
+// question_no,type,description,option_1,option_2,option_3,option_4,correct_option_no,marks
+type Question = {
+  question_no: number;
+  type: string;
+  description: string;
+  option_1: string;
+  option_2: string;
+  option_3: string;
+  option_4: string;
+  correct_option_no: number;
+  marks: number;
+};
+
 export const createContest = async (
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
 ) => {
@@ -19,12 +35,11 @@ export const createContest = async (
     await connection.beginTransaction(); // Start transaction
 
     /* 1. Create Contest */
-    const [cResult] = await connection.query(
+    const [cResult] = await connection.query<ResultSetHeader>(
       "INSERT INTO contests (title, description, created_by, visibility) VALUES (?, ?, ?, ?)",
       [
         req.body.title,
         req.body.description,
-        //@ts-ignore //TODO
         req.user.id,
         req.body.visibility || "private",
       ]
@@ -33,15 +48,16 @@ export const createContest = async (
     const contest_id = cResult.insertId;
 
     /* 2. Parse CSV */
-    const results = [];
-    fs.createReadStream(req.file.path)
+
+    const results: Question[] = [];
+    fs.createReadStream(req.file!.path)
       .pipe(csv())
-      .on("data", (row) => results.push(row))
+      .on("data", (row: Question) => results.push(row))
       .on("end", async () => {
         try {
           for (const q of results) {
             // Insert question
-            const [qResult] = await connection.query(
+            const [qResult] = await connection.query<ResultSetHeader>(
               "INSERT INTO QUESTIONS (contest_id, type, description, marks) VALUES (?, ?, ?, ?)",
               [contest_id, q.type, q.description, q.marks]
             );
@@ -50,15 +66,16 @@ export const createContest = async (
             // Insert options
             const options = [];
             for (let i = 1; i <= 4; i++) {
-              if (!q[`option_${i}`]) {
+              const optionKey = `option_${i}` as keyof Question;
+              if (!q[optionKey]) {
                 throw new Error(
                   `Missing option_${i} for question: ${q.description}`
                 );
               }
 
-              const [qOption] = await connection.query(
+              const [qOption] = await connection.query<ResultSetHeader>(
                 "INSERT INTO MCQS (question_id, option_text, is_correct) VALUES (?, ?, ?)",
-                [question_id, q[`option_${i}`], false]
+                [question_id, q[optionKey], false]
               );
               options.push(qOption.insertId);
             }
@@ -130,7 +147,7 @@ export const getContest = async (
   const connection = await Pool.getConnection();
 
   try {
-    const [contestRows] = await connection.query(
+    const [contestRows] = await connection.query<RowDataPacket[]>(
       "SELECT contest_id, title, description FROM CONTESTS WHERE contest_id = ?",
       [req.params.contestId]
     );
@@ -141,7 +158,7 @@ export const getContest = async (
 
     const contest = contestRows[0];
 
-    const [questions] = await connection.query(
+    const [questions] = await connection.query<RowDataPacket[]>(
       "SELECT question_id, type, description, marks FROM QUESTIONS WHERE contest_id = ?",
       [req.params.contestId]
     );
@@ -182,7 +199,7 @@ export const getAllContest = async (
     );
 
     return new ApiResponse(200, "sucess", contests).send(res);
-  } catch (error) {
+  } catch (error: any) {
     res.status(500).json({
       message: "failed",
       error: `INTERNAL SERVER ERROR: ${error.message}`,
