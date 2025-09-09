@@ -63,9 +63,11 @@ export const signup = async (
     });
 
     return new ApiResponse(200, "success", {
-      id: qUser.insertId,
-      name,
-      email,
+      user: {
+        id: qUser.insertId,
+        name,
+        email,
+      },
       token,
     }).send(res);
   } catch (error: any) {
@@ -88,7 +90,7 @@ export const login = async (
     const connection = await Pool.getConnection();
 
     const [qUser] = await connection.query<RowDataPacket[]>(
-      "SELECT USER_ID, PASSWORD, ROLE_ID FROM USERS WHERE EMAIL = ?",
+      "SELECT USER_ID, PASSWORD, ROLE_ID, NAME FROM USERS WHERE EMAIL = ?",
       [email]
     );
 
@@ -106,7 +108,10 @@ export const login = async (
       email,
     });
 
-    return new ApiResponse(200, "success", { token }).send(res);
+    return new ApiResponse(200, "success", {
+      token,
+      user: { id: qUser[0].USER_ID, name: qUser[0].NAME, email },
+    }).send(res);
   } catch (error: any) {
     return res.status(500).json({
       message: "Internal server Error",
@@ -148,6 +153,34 @@ export const protect = (
   // append user
   req.user = verified as { id: number; role_id: number; email: string };
   return next();
+};
+
+export const getLoggedInUser = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const Pool = getPool();
+    const connection = await Pool.getConnection();
+    const [qUser] = await connection.query<RowDataPacket[]>(
+      "SELECT USER_ID, NAME, EMAIL, ROLE_ID FROM USERS WHERE USER_ID = ?",
+      [req.user.id]
+    );
+
+    return new ApiResponse(200, "success", {
+      user: {
+        id: qUser[0].USER_ID,
+        name: qUser[0].NAME,
+        email: qUser[0].EMAIL,
+      },
+    }).send(res);
+  } catch (error: any) {
+    return res.status(500).json({
+      message: error.message,
+      error,
+    });
+  }
 };
 
 export const restricted = (...roles: string[]) => {
