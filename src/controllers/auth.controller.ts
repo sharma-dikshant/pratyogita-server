@@ -5,6 +5,9 @@ import jwt, { JwtPayload } from "jsonwebtoken";
 import { getPool } from "../../db/config";
 import ApiResponse from "../utils/ApiResponse";
 import { FieldPacket, ResultSetHeader, RowDataPacket } from "mysql2";
+import { OAuth2Client } from "google-auth-library";
+
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // ---------------- JWT helpers ----------------
 const createAccessToken = (data: Record<string, unknown>): string => {
@@ -212,4 +215,88 @@ export const restricted = (...roles: string[]) => {
       });
     }
   };
+};
+
+export const googleLogin = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const idToken = req.body.id_token as string | undefined;
+
+  if (!idToken)
+    return res.status(400).json({ message: "id_token is required" });
+
+  try {
+    // verify token
+    const ticket = await googleClient.verifyIdToken({
+      idToken,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+    if (!payload)
+      return res.status(400).json({ message: "invalid Google token" });
+
+    const googleId = payload.sub; // unique google id
+    const name = payload.name;
+    const email = payload.email;
+
+    const Pool = getPool();
+    const connection = await Pool.getConnection();
+
+    try {
+      // 1: find if user already exists with this googleId or email
+      const [rows] = await connection.query<RowDataPacket[]>(
+        "SELECT USER_ID, NAME, EMAIL, GOOGLE_ID, METHOD FROM USERS WHERE GOOGLE_ID = ? OR EMAIL = ?",
+        [googleId, email]
+      );
+
+      let user_id: number;
+      let db_name = name;
+
+      if (rows.length) {
+        // existing user found
+        const user = rows[0];
+        user_id = user.USER_ID;
+
+        // if an account exists but with method == local then tell user to verify with the password
+        if (!user.GOOGLE_ID && user.METHOD === "local") {
+          return res.status(409).json({
+            message:
+              "An account with this email already exists. Please login with your password",
+          });
+        }
+
+        db_name = user.NAME ?? db_name;
+      } else {
+        // create new user
+        const [result] = await connection.query<ResultSetHeader>(
+          "INSERT INTO USERS (NAME, EMAIL, ROLE_ID, GOOGLE_ID, METHOD) VALUES (?, ?, ?, ?, ?)",
+          [name, email, 3, googleId, "google"]
+        );
+
+        user_id = (result as ResultSetHeader).insertId;
+      }
+
+      // creating access token
+      const token = createAccessToken({
+        id: user_id,
+        role_id: 3,
+        email,
+      });
+
+      return new ApiResponse(200, "success", {
+        token,
+        user: { id: user_id, name: db_name, email },
+      }).send(res);
+    } finally {
+      connection.release();
+    }
+  } catch (err: any) {
+    console.error("googleLogin err:", err);
+    return res
+      .status(500)
+      .json({ message: "Google login failed", error: err.message });
+  }
 };
