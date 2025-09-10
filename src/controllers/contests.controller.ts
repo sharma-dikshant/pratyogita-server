@@ -206,3 +206,203 @@ export const getAllContest = async (
     });
   }
 };
+
+export const updateContest = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  const { title, description, visibility, start_time, end_time } = req.body;
+  const contestId = req.params.contestId;
+  const Pool = getPool();
+  const connection = await Pool.getConnection();
+
+  try {
+    // Check if contest exists
+    const [contest] = await connection.query<RowDataPacket[]>(
+      "SELECT * FROM CONTESTS WHERE CONTEST_ID = ?",
+      [contestId]
+    );
+
+    if (!contest.length) {
+      return new ApiResponse(
+        404,
+        `Contest with id ${contestId} not found`,
+        null
+      ).send(res);
+    }
+
+    // Collect fields to update
+    const fields: string[] = [];
+    const values: string[] = [];
+
+    if (title !== undefined) {
+      fields.push("TITLE = ?");
+      values.push(title);
+    }
+    if (description !== undefined) {
+      fields.push("DESCRIPTION = ?");
+      values.push(description);
+    }
+    if (visibility !== undefined) {
+      fields.push("VISIBILITY = ?");
+      values.push(visibility);
+    }
+    if (start_time !== undefined) {
+      fields.push("START_TIME = ?");
+      values.push(start_time);
+    }
+    if (end_time !== undefined) {
+      fields.push("END_TIME = ?");
+      values.push(end_time);
+    }
+
+    if (fields.length === 0) {
+      return new ApiResponse(400, "No fields provided for update", null).send(
+        res
+      );
+    }
+
+    // Add contestId at the end
+    values.push(contestId);
+
+    // Build query dynamically
+    const query = `UPDATE CONTESTS SET ${fields.join(
+      ", "
+    )} WHERE CONTEST_ID = ?`;
+
+    const [updateResult] = await connection.query(query, values);
+
+    if ((updateResult as any).affectedRows === 0) {
+      return new ApiResponse(400, "No changes made", null).send(res);
+    }
+
+    // Fetch updated contest
+    const [updatedContest] = await connection.query<RowDataPacket[]>(
+      "SELECT * FROM CONTESTS WHERE CONTEST_ID = ?",
+      [contestId]
+    );
+
+    return new ApiResponse(
+      200,
+      "Contest updated successfully",
+      updatedContest[0]
+    ).send(res);
+  } catch (error: any) {
+    return new ApiResponse(500, "Internal server error", {
+      message: error.message,
+      error,
+    }).send(res);
+  } finally {
+    connection.release();
+  }
+};
+
+export const enrollInContest = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  const contestId = req.params.contestId;
+
+  const Pool = getPool();
+  const connection = await Pool.getConnection();
+
+  try {
+    const [result] = await connection.query<RowDataPacket[]>(
+      "SELECT CONTEST_ID FROM CONTESTS WHERE CONTEST_ID = ?",
+      [contestId]
+    );
+
+    if (!result.length) {
+      return new ApiResponse(
+        404,
+        `no contest with id ${contestId} found!`,
+        null
+      ).send(res);
+    }
+
+    const [q] = await connection.query<ResultSetHeader>(
+      "INSERT INTO PARTICIPANTS (CONTEST_ID, USER_ID) VALUES(?, ?)",
+      [contestId, req.user.id]
+    );
+    const participant_id = (q as ResultSetHeader).insertId;
+    return new ApiResponse(
+      200,
+      `enrolled successfully with id ${participant_id}`,
+      null
+    ).send(res);
+  } catch (error: any) {
+    return new ApiResponse(500, "internal server error", {
+      message: error.message,
+      error,
+    }).send(res);
+  }
+};
+
+export const getContestResult = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) => {};
+
+export const submitContest = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  const contestId: number = Number(req.params.contestId);
+  const { userSubmissions } = req.body;
+  const Pool = getPool();
+  const connection = await Pool.getConnection();
+
+  try {
+    // Check if contest exists
+    const [qContest] = await connection.query<RowDataPacket[]>(
+      "SELECT CONTEST_ID FROM CONTESTS WHERE CONTEST_ID = ?",
+      [contestId]
+    );
+
+    if (!qContest.length) {
+      return new ApiResponse(
+        404,
+        `Contest with id ${contestId} not found!`,
+        null
+      ).send(res);
+    }
+
+    // If no submissions
+    if (!userSubmissions || !userSubmissions.length) {
+      return new ApiResponse(200, "No submissions received", {
+        contest_id: contestId,
+        total_question_attempted: 0,
+      }).send(res);
+    }
+
+    // Prepare values for bulk insert
+    const values = userSubmissions.map((r: any) => [
+      r.question_id,
+      req.user.id,
+      r.mcq_id,
+    ]);
+
+    // Bulk insert query
+    await connection.query<ResultSetHeader>(
+      `INSERT INTO SUBMISSIONS (QUESTION_ID, SUBMITTED_BY, MCQ_ID)
+       VALUES ?`,
+      [values]
+    );
+
+    return new ApiResponse(200, "Contest submitted successfully", {
+      contest_id: contestId,
+      total_question_attempted: userSubmissions.length,
+    }).send(res);
+  } catch (error: any) {
+    return new ApiResponse(500, "Internal server error", {
+      message: error.message,
+      error,
+    }).send(res);
+  } finally {
+    connection.release();
+  }
+};

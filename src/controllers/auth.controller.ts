@@ -113,7 +113,7 @@ export const login = async (
 
     return new ApiResponse(200, "success", {
       token,
-      user: { id: qUser[0].USER_ID, name: qUser[0].NAME, email },
+      user: { id: qUser[0].USER_ID, name: qUser[0].NAME, email, role_id: qUser[0].ROLE_ID },
     }).send(res);
   } catch (error: any) {
     return res.status(500).json({
@@ -176,6 +176,7 @@ export const getLoggedInUser = async (
         id: qUser[0].USER_ID,
         name: qUser[0].NAME,
         email: qUser[0].EMAIL,
+        role_id: qUser[0].ROLE_ID
       },
     }).send(res);
   } catch (error: any) {
@@ -288,7 +289,7 @@ export const googleLogin = async (
 
       return new ApiResponse(200, "success", {
         token,
-        user: { id: user_id, name: db_name, email },
+        user: { id: user_id, name: db_name, email, role_id: 3 },
       }).send(res);
     } finally {
       connection.release();
