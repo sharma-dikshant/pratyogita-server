@@ -9,6 +9,7 @@ import {
   enrollInContest,
   getContestResult,
   submitContest,
+  evaluateContest,
 } from "./../controllers/contests.controller";
 import { protect } from "./../controllers/auth.controller";
 
@@ -31,5 +32,7 @@ router.post("/:contestId/enroll", enrollInContest); // enrolling to a contest
 router.get("/:contestId/result", getContestResult); // result of a contest
 //@ts-ignore
 router.post("/:contestId/submission", submitContest); // submitting question
+//@ts-ignore
+router.get("/:contestId/evaluate", evaluateContest);
 
 export default router;
