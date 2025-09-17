@@ -1,7 +1,7 @@
 import express from "express";
 import multer from "multer";
 
-import { createContest, getContest, getAllContest, updateContest } from '../controllers/contest.controller';
+import { createContest, getContest, getAllContest, updateContest, getContestDetails } from '../controllers/contest.controller';
 import { enrollInContest } from '../controllers/participant.controller';
 import { submitContest, evaluateContest}  from '../controllers/submission.controller';
 import { getContestResult } from '../controllers/result.controller'
@@ -13,9 +13,12 @@ const uploads = multer({ dest: "./uploads" });
 //@ts-ignore
 //TODO fix -> may be by using global error middleware
 router.use(protect);
+//@ts-ignore
 router.get("/all", getAllContest);
 //@ts-ignore
 router.get("/:contestId", getContest);
+//@ts-ignore
+router.get("/:contestId/details", getContestDetails);
 //@ts-ignore
 router.post("/:contestId/enroll", enrollInContest); // enrolling to a contest
 //@ts-ignore
