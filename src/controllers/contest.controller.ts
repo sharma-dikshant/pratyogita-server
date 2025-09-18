@@ -199,12 +199,13 @@ export const getAllContest = async (
 
     // building base query
     let query = `SELECT C.CONTEST_ID, C.TITLE, C.VISIBILITY, C.START_TIME, C.END_TIME FROM
-                 CONTESTS AS C JOIN PARTICIPANTS AS P `;
+                 CONTESTS AS C`;
     let conditions: string[] = [];
     let params: any[] = [];
 
     // getting only users contests
     if (my === "true") {
+      query = query + " JOIN PARTICIPANTS AS P "
       conditions.push(" P.USER_ID = ? ");
       params.push(userId);
     }
@@ -212,7 +213,7 @@ export const getAllContest = async (
     // pagination
 
     if (conditions.length) {
-      query = query + "WHERE" + conditions.join(" AND ");
+      query = query + " WHERE " + conditions.join(" AND ");
     }
 
     console.log(query);
