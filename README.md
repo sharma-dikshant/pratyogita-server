@@ -23,7 +23,7 @@ Pratyogita is a contest management backend built with Node.js and TypeScript. It
 - Node.js (v16 or above recommended)
 - npm (comes with Node.js)
 - Git
-- A database (MySQL recommended)
+- A database - MySQL
 
 ## Installation
 1. **Clone the repository:**
